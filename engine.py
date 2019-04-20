@@ -1,4 +1,5 @@
 import sdl2
+import sdl2.sdlimage
 from typing import Set, List, Optional
 
 from core import Rect, Vector2D, Size, Color
@@ -24,21 +25,42 @@ class RenderObject(object):
     def __init__(self, texture: sdl2.SDL_Texture) -> None:
         self.texture = texture
 
-    @staticmethod
-    def RenderObjectFromSurface(renderer: sdl2.SDL_Renderer, surface: sdl2.SDL_Surface) -> 'RenderObject':
+    @classmethod
+    def RenderObjectFromSurface(cls, renderer: sdl2.SDL_Renderer, surface: sdl2.SDL_Surface) -> 'RenderObject':
         texture = sdl2.SDL_CreateTextureFromSurface(renderer, surface)
         if not texture:
-            raise RuntimeError("Unable to create texture from surface! SDL Error: " + sdl2.SDL_GetError())
+            raise RuntimeError("Unable to create texture from surface! SDL Error: "
+                               + str(sdl2.SDL_GetError()))
         return RenderObject(texture)
 
-    @staticmethod
-    def RenderObjectFromColor(renderer: sdl2.SDL_Renderer, color: Color) -> 'RenderObject':
+    @classmethod
+    def RenderObjectFromColor(cls, renderer: sdl2.SDL_Renderer, color: Color) -> 'RenderObject':
         texture = sdl2.SDL_CreateTexture(renderer, sdl2.SDL_PIXELFORMAT_RGBA8888, sdl2.SDL_TEXTUREACCESS_TARGET, 1, 1)
         sdl2.SDL_SetRenderTarget(renderer, texture)
         sdl2.SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a)
         sdl2.SDL_RenderClear(renderer)
         sdl2.SDL_SetRenderTarget(renderer, None)
         return RenderObject(texture)
+
+    @classmethod
+    def RenderObjectFromFile(cls, renderer: sdl2.SDL_Renderer, path: bytes) -> 'RenderObject':
+        surface = sdl2.sdlimage.IMG_Load(path)
+        if not surface:
+            raise RuntimeError("Unable to load image "
+                               + str(path)
+                               + "! SDL_image Error: "
+                               + str(sdl2.sdlimage.IMG_GetError()))
+
+        render_object = cls.RenderObjectFromSurface(renderer, surface)
+        sdl2.SDL_FreeSurface(surface)
+        return render_object
+
+    @classmethod
+    def RenderObjectFromFileWithFrame(cls, renderer: sdl2.SDL_Renderer, path: bytes, frameSize: sdl2.SDL_Rect) -> 'RenderObject':
+        render_object = cls.RenderObjectFromFile(renderer, path)
+        render_object.renderFrameSize = frameSize
+        render_object.fullRender = False
+        return render_object
 
     def render(self, context, position, size, cameraPosition, cameraSize) -> None:
         render_position = position.plus(
@@ -59,8 +81,62 @@ class RenderObject(object):
 
 
 class Animation(object):
+    frames: List[RenderObject]
+    startTick: int
+    speed: int
+    turnedLeft: bool
+
+    def __init__(self, speed: int) -> None:
+        self.frames = list()
+        self.startTick = sdl2.SDL_GetTicks()
+        self.speed = speed
+        self.turnedLeft = False
+
+    @classmethod
+    def AnimationWithSingleRenderObject(cls, renderObject: RenderObject) -> 'Animation':
+        animation = Animation(1)
+        animation.addFrame(renderObject)
+        return animation
+
+    @classmethod
+    def AnimationWithSpeedAndTexturePath(cls, speed: int, renderer: sdl2.SDL_Renderer, filePath: bytes, width: int, height: int, frames: int) -> 'Animation':
+        animation = Animation(speed)
+        rect = sdl2.SDL_Rect()
+        rect.w = width
+        rect.h = height
+        rect.x = rect.y = 0
+        render_object = RenderObject.RenderObjectFromFileWithFrame(renderer, filePath, rect.__copy__())
+        animation.addFrame(render_object)
+        for i in range(1, frames):
+            rect.y = i*rect.h
+            new_render_object = RenderObject(render_object.texture)
+            new_render_object.fullRender = render_object.fullRender
+            new_render_object.renderFlip = render_object.renderFlip
+            new_render_object.renderFrameSize = rect.__copy__()
+            animation.addFrame(new_render_object)
+        return animation
+
+    def addFrame(self, frame: RenderObject) -> None:
+        self.frames.append(frame)
+
+    def turnLeft(self, toTheLeft: bool) -> None:
+        if toTheLeft and not self.turnedLeft:
+            flip = sdl2.SDL_FLIP_HORIZONTAL
+            self.turnedLeft = True
+        elif not toTheLeft and self.turnedLeft:
+            flip = sdl2.SDL_FLIP_NONE
+            self.turnedLeft = False
+        else:
+            return
+
+        for frame in self.frames:
+            frame.renderFlip = flip
+
     def animate(self) -> RenderObject:
-        pass
+        ticks = sdl2.SDL_GetTicks()
+        if ticks - self.startTick >= len(self.frames) * self.speed:
+            self.startTick = ticks
+        return self.frames[int((ticks - self.startTick) / self.speed)]
 
 
 class PhysicsState(object):
@@ -231,6 +307,7 @@ class GameContext(object):
         self.renderer = renderer
         self.settings = gameSettings
         if not self.renderer:
-            raise RuntimeError("Renderer could not be created. SDL Error: " + sdl2.SDL_GetError())
+            raise RuntimeError("Renderer could not be created. SDL Error: "
+                               + str(sdl2.SDL_GetError()))
         if not self.settings:
             raise RuntimeError("Could not load game settings")

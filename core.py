@@ -1,11 +1,14 @@
 class Vector2D(object):
+    x: float
+    y: float
+
     def __init__(self, x: float, y: float) -> None:
         self.x = x
         self.y = y
 
-    @staticmethod
-    def Empty() -> 'Vector2D':
-        return Vector2D(0, 0)
+    @classmethod
+    def Empty(cls) -> 'Vector2D':
+        return cls(0, 0)
 
     def copy(self) -> 'Vector2D':
         return Vector2D(self.x, self.y)
@@ -24,30 +27,42 @@ class Vector2D(object):
 
 
 class Size(object):
+    width: float
+    height: float
+
     def __init__(self, width: float, height: float) -> None:
         self.width = width
         self.height = height
 
-    @staticmethod
-    def Empty() -> 'Size':
-        return Size(0, 0)
+    @classmethod
+    def Empty(cls) -> 'Size':
+        return cls(0, 0)
 
     def copy(self) -> 'Size':
         return Size(self.width, self.height)
 
+    def times(self, s: float) -> 'Size':
+        return Size(self.width * s, self.height * s)
+
+    def div(self, s: float) -> 'Size':
+        return Size(self.width / s, self.height / s)
+
 
 class Rect(object):
+    size: Size
+    center: Vector2D
+
     def __init__(self, center: Vector2D, size: Size) -> None:
-        self.center = center
-        self.size = size
+        self.center = center.copy()
+        self.size = size.copy()
 
-    @staticmethod
-    def Empty() -> 'Rect':
-        return Rect(Vector2D.Empty(), Size.Empty())
+    @classmethod
+    def Empty(cls) -> 'Rect':
+        return cls(Vector2D.Empty(), Size.Empty())
 
-    @staticmethod
-    def Make(x: float, y: float, width: float, height: float) -> 'Rect':
-        return Rect(Vector2D(x, y), Size(width, height))
+    @classmethod
+    def Make(cls, x: float, y: float, width: float, height: float) -> 'Rect':
+        return cls(Vector2D(x, y), Size(width, height))
 
     def copy(self) -> 'Rect':
         return Rect(self.center.copy(), self.size.copy())

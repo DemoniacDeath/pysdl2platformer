@@ -17,11 +17,18 @@ class Camera(GameObject):
         super(Camera, self).__init__(context, frame)
         self.originalSize = frame.size.copy()
 
+    def handleKeyboard(self, state) -> None:
+        if state[sdl2.SDL_SCANCODE_Z]:
+            self.frame.size.width = self.originalSize.width * 2
+            self.frame.size.height = self.originalSize.height * 2
+        else:
+            self.frame.size = self.originalSize.copy()
+
 
 class World(GameObject):
     def __init__(self, context, frame: Rect) -> None:
         super(World, self).__init__(context, frame)
-        self.camera = Camera(self.context, self.frame)
+        self.camera = Camera(self.context, Rect(self.frame.center, self.frame.size.div(2)))
 
     def handleEvent(self, e: sdl2.SDL_Event) -> None:
         super(World, self).handleEvent(e)
@@ -88,14 +95,73 @@ class Frame(GameObject):
         self.addChild(self.floor)
 
 
-class UI(GameObject):
-    pass
-
-
 class Consumable(GameObject):
     def __init__(self, context: 'GameContext', frame: Rect) -> None:
         super().__init__(context, frame)
         self.physics = PhysicsState(self)
+
+
+class Bar(GameObject):
+    value: float
+    originalFrame: Rect
+
+    def __init__(self, context: 'GameContext', frame: Rect) -> None:
+        super().__init__(context, frame)
+        self.value = 100
+        self.originalFrame = frame.copy()
+
+    def setValue(self, newValue: float) -> None:
+        if newValue > 100:
+            newValue = 100
+        if newValue < 0:
+            newValue = 0
+        self.value = newValue
+
+        self.frame = Rect(
+            Vector2D(
+                self.originalFrame.center.x + self.originalFrame.size.width*((newValue - 100) / 200),
+                self.originalFrame.center.y
+            ),
+            Size(
+                self.originalFrame.size.width / 100 * newValue,
+                self.originalFrame.size.height
+            )
+        )
+
+
+class Text(GameObject):
+    font: Optional[sdl2.sdlttf.TTF_Font]
+    text: bytes
+    color: Optional[sdl2.SDL_Color]
+
+    def __init__(self, context: 'GameContext', frame: Rect) -> None:
+        super().__init__(context, frame)
+        self.font = None
+        self.text = b""
+        self.color = None
+
+    def setText(self, newText: bytes) -> None:
+        self.text = newText
+        self.generate()
+
+    def setFont(self, path: bytes, size: int) -> None:
+        self.font = sdl2.sdlttf.TTF_OpenFont(path, size)
+        if not self.font:
+            raise RuntimeError("Could not load font at "
+                               + str(path)
+                               + "! SDL_ttf error: "
+                               + str(sdl2.sdlttf.TTF_GetError()))
+        self.generate()
+
+    def setColor(self, newColor: sdl2.SDL_Color) -> None:
+        self.color = newColor
+        self.generate()
+
+    def generate(self) -> None:
+        if self.font and len(self.text) and self.color:
+            surface = sdl2.sdlttf.TTF_RenderText_Solid(self.font, self.text, self.color)
+            self.renderObject = RenderObject.RenderObjectFromSurface(self.context.renderer, surface)
+            sdl2.SDL_FreeSurface(surface)
 
 
 class Player(GameObject):
@@ -113,6 +179,10 @@ class Player(GameObject):
     jumpAnimation: Optional[Animation]
     crouchAnimation: Optional[Animation]
     crouchMoveAnimation: Optional[Animation]
+    powerBar: Optional[Bar]
+    healthBar: Optional[Bar]
+    deathText: Optional[Text]
+    winText: Optional[Text]
 
     def __init__(self, context: GameContext, frame: Rect) -> None:
         super(Player, self).__init__(context, frame)
@@ -150,6 +220,7 @@ class Player(GameObject):
         move_left = False
         move_right = False
         move_vector = Vector2D.Empty()
+
         if state[sdl2.SDL_SCANCODE_LEFT] or state[sdl2.SDL_SCANCODE_A]:
             move_vector.x -= self.speed
             move_left = True
@@ -170,20 +241,44 @@ class Player(GameObject):
 
         self.setCrouched(sit_down)
 
+        if move_left and not move_right:
+            self.moveAnimation.turnLeft(True)
+            self.crouchAnimation.turnLeft(True)
+            self.crouchMoveAnimation.turnLeft(True)
+        if move_right and not move_left:
+            self.moveAnimation.turnLeft(False)
+            self.crouchAnimation.turnLeft(False)
+            self.crouchMoveAnimation.turnLeft(False)
+
+        if not move_left and not move_right and not self.jumped and not self.crouched:
+            self.animation = self.idleAnimation
+        if not move_left and not move_right and not self.jumped and self.crouched:
+            self.animation = self.crouchAnimation
+        if (move_left or move_right) and not self.jumped and not self.crouched:
+            self.animation = self.moveAnimation
+        if (move_left or move_right) and not self.jumped and self.crouched:
+            self.animation = self.crouchMoveAnimation
+        if self.jumped and self.crouched:
+            self.animation = self.crouchAnimation
+        if self.jumped and not self.crouched:
+            self.animation = self.jumpAnimation
+
         self.frame.center.x += move_vector.x
         self.frame.center.y += move_vector.y
 
     def dealDamage(self, damage: int) -> None:
         if not self.won:
             self.health -= damage
-            # TODO: set value for healthBar
+            self.healthBar.setValue(self.health)
             if self.health < 0:
                 self.die()
 
     def die(self) -> None:
+        self.deathText.visible = True
         self.dead = True
 
     def win(self) -> None:
+        self.winText.visible = True
         self.won = True
 
     def setCrouched(self, crouched: bool) -> None:
@@ -199,7 +294,7 @@ class Player(GameObject):
     def handleEnterCollision(self, collision: Collision) -> None:
         if isinstance(collision.collider, Consumable):
             self.power += 1
-            # TODO set value for powerBar
+            self.powerBar.setValue(self.power)
             collision.collider.removed = True
             self.speed += 0.01
             self.jumpSpeed += 0.01
@@ -225,21 +320,24 @@ def Exit() -> None:
 class Game:
     context: GameContext
     world: World
-    ui: UI
+    ui: GameObject
 
     def __init__(self) -> None:
         if sdl2.SDL_Init(sdl2.SDL_INIT_VIDEO) < 0:
-            raise RuntimeError("SDL could not initialize! SDL Error: " + sdl2.SDL_GetError())
+            raise RuntimeError("SDL could not initialize! SDL Error: "
+                               + str(sdl2.SDL_GetError()))
 
         if not sdl2.SDL_SetHint(sdl2.SDL_HINT_RENDER_SCALE_QUALITY, b"1"):
             print("Warning: Linear texture filtering not enabled.")
 
         img_flags = sdl2.sdlimage.IMG_INIT_PNG
         if not (sdl2.sdlimage.IMG_Init(img_flags) & img_flags):
-            raise RuntimeError("SDL_image could not initialize! SDL_image Error: " + sdl2.sdlimage.IMG_GetError())
+            raise RuntimeError("SDL_image could not initialize! SDL_image Error: "
+                               + str(sdl2.sdlimage.IMG_GetError()))
 
-        if sdl2.sdlttf.TTF_Init == -1:
-            raise RuntimeError("SDL_ttf could not initialize! SDL_ttf Error: " + sdl2.sdlttf.TTF_GetError())
+        if sdl2.sdlttf.TTF_Init() == -1:
+            raise RuntimeError("SDL_ttf could not initialize! SDL_ttf Error: "
+                               + str(sdl2.sdlttf.TTF_GetError()))
 
         settings = GameSettings('Test game', 800, 600)
 
@@ -250,7 +348,8 @@ class Game:
                                        sdl2.SDL_WINDOW_SHOWN
                                        )
         if not window:
-            raise RuntimeError("Window could not be created. SDL Error: " + sdl2.SDL_GetError())
+            raise RuntimeError("Window could not be created. SDL Error: "
+                               + str(sdl2.SDL_GetError()))
 
         self.context = GameContext(
             sdl2.SDL_CreateRenderer(window, -1, sdl2.SDL_RENDERER_ACCELERATED | sdl2.SDL_RENDERER_PRESENTVSYNC),
@@ -265,10 +364,20 @@ class Game:
                 self.context.settings.windowWidth / 2,
                 self.context.settings.windowHeight / 2))
 
-        self.ui = UI(self.context, Rect(Vector2D.Empty(), self.world.camera.originalSize.copy()))
+        self.ui = GameObject(self.context, Rect(Vector2D.Empty(), self.world.camera.originalSize.copy()))
 
         player = Player(self.context, Rect.Make(0, 20, 10, 20))
-        player.renderObject = RenderObject.RenderObjectFromColor(self.context.renderer, Color(0, 0, 0, 255))
+        player.idleAnimation = Animation.AnimationWithSingleRenderObject(
+            RenderObject.RenderObjectFromFile(self.context.renderer, b"img/idle.png"))
+        player.moveAnimation = Animation.AnimationWithSpeedAndTexturePath(
+            80, self.context.renderer, b"img/move.png", 40, 80, 6)
+        player.jumpAnimation = Animation.AnimationWithSingleRenderObject(
+            RenderObject.RenderObjectFromFile(self.context.renderer, b"img/jump.png"))
+        player.crouchAnimation = Animation.AnimationWithSingleRenderObject(
+            RenderObject.RenderObjectFromFile(self.context.renderer, b"img/crouch.png"))
+        player.crouchMoveAnimation = Animation.AnimationWithSingleRenderObject(
+            RenderObject.RenderObjectFromFile(self.context.renderer, b"img/crouch.png"))
+
         player.speed = 1.3
         player.jumpSpeed = 2.5
         player.physics.gravityForce = 0.1
@@ -290,20 +399,63 @@ class Game:
             random_y = pair[1]
 
             rect = Rect.Make(
-                    (self.world.frame.size.width / 2) - 15 - random_x * 10,
-                    (self.world.frame.size.height / 2) - 15 - random_y * 10,
-                    10, 10)
+                (self.world.frame.size.width / 2) - 15 - random_x * 10,
+                (self.world.frame.size.height / 2) - 15 - random_y * 10,
+                10, 10)
             if power_count:
-                object = Consumable(self.context, rect)
-                object.renderObject = RenderObject.RenderObjectFromColor(self.context.renderer, Color(0, 0xff, 0, 0x80))
-                self.world.addChild(object)
+                game_object = Consumable(self.context, rect)
+                game_object.renderObject = RenderObject.RenderObjectFromColor(
+                    self.context.renderer, Color(0, 0xff, 0, 0x80))
                 power_count -= 1
             else:
-                object = Solid(self.context, rect)
-                object.renderObject = RenderObject.RenderObjectFromColor(self.context.renderer, Color(0, 0, 0, 0))
-                self.world.addChild(object)
+                game_object = Solid(self.context, rect)
+                game_object.renderObject = RenderObject.RenderObjectFromFile(self.context.renderer, b"img/brick.png")
+            self.world.addChild(game_object)
 
         self.world.addChild(player)
+
+        self.ui = GameObject(self.context, Rect(Vector2D.Empty(), self.world.camera.originalSize))
+
+        death_text = Text(self.context, Rect.Make(0, 0, 100, 10))
+        death_text.setText(b"You died! Game Over!")
+        death_text.setFont(b"fonts/Scratch_.ttf", 28)
+        death_text.setColor(sdl2.SDL_Color(0xff, 0, 0))
+        death_text.visible = False
+        self.ui.addChild(death_text)
+        player.deathText = death_text
+
+        win_text = Text(self.context, Rect.Make(0, 0, 100, 10))
+        win_text.setText(b"Congratulations! You won!")
+        win_text.setFont(b"fonts/Scratch_.ttf", 28)
+        win_text.setColor(sdl2.SDL_Color(0, 0xff, 0))
+        win_text.visible = False
+        self.ui.addChild(win_text)
+        player.winText = win_text
+
+        health_bar_holder = GameObject(self.context, Rect.Make(
+            -self.world.camera.originalSize.width/2 + 16,
+            -self.world.camera.originalSize.height/2 + 2.5,
+            30, 3))
+        health_bar_holder.renderObject = RenderObject.RenderObjectFromColor(self.context.renderer, Color(0, 0, 0, 0xff))
+        self.ui.addChild(health_bar_holder)
+
+        power_bar_holder = GameObject(self.context, Rect.Make(
+            self.world.camera.originalSize.width/2 - 16,
+            -self.world.camera.originalSize.height/2 + 2.5,
+            30, 3))
+        power_bar_holder.renderObject = RenderObject.RenderObjectFromColor(self.context.renderer, Color(0, 0, 0, 0xff))
+        self.ui.addChild(power_bar_holder)
+
+        health_bar = Bar(self.context, Rect.Make(0, 0, 29, 2))
+        health_bar.renderObject = RenderObject.RenderObjectFromColor(self.context.renderer, Color(0xff, 0, 0, 0xff))
+        health_bar_holder.addChild(health_bar)
+        player.healthBar = health_bar
+
+        power_bar = Bar(self.context, Rect.Make(0, 0, 29, 2))
+        power_bar.renderObject = RenderObject.RenderObjectFromColor(self.context.renderer, Color(0, 0xff, 0, 0xff))
+        power_bar.setValue(0)
+        power_bar_holder.addChild(power_bar)
+        player.powerBar = power_bar
 
     def run(self) -> None:
         e = sdl2.SDL_Event()
