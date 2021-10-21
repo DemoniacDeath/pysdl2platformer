@@ -99,8 +99,7 @@ class Game:
         power_count = 100
         x = int(self.world.frame.size.width / 10 - 2)
         y = int(self.world.frame.size.height / 10 - 2)
-        pairs = random.sample(set(pair_range(x, y)), count)
-        for pair in pairs:
+        for pair in random.sample(set(pair_range(x, y)), count):
             random_x = pair[0]
             random_y = pair[1]
 
