@@ -70,7 +70,7 @@ class Game:
                 self.context.settings.windowWidth / 2,
                 self.context.settings.windowHeight / 2))
 
-        self.ui = GameObject(self.context, Rect(Vector2D.empty(), self.world.camera.originalSize.copy()))
+        self.ui = GameObject(self.context, Rect(Vector2D(), self.world.camera.originalSize.copy()))
 
         player = Player(self.context, Rect.make(0, 20, 10, 20))
         player.idleAnimation = Animation.animation_with_single_render_object(
@@ -121,7 +121,7 @@ class Game:
 
         self.world.add_child(player)
 
-        self.ui = GameObject(self.context, Rect(Vector2D.empty(), self.world.camera.originalSize))
+        self.ui = GameObject(self.context, Rect(Vector2D(), self.world.camera.originalSize))
 
         death_text = Text(self.context, Rect.make(0, 0, 100, 10))
         death_text.set_text(b"You died! Game Over!")
@@ -197,7 +197,7 @@ class Game:
                 self.world.camera.frame.size)
             self.ui.render(
                 self.ui.frame.center,
-                Vector2D.empty(),
+                Vector2D(),
                 self.world.camera.originalSize)
 
             sdl2.SDL_RenderPresent(self.context.renderer)

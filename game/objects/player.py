@@ -59,7 +59,7 @@ class Player(GameObject):
             self.physics.gravity = not self.physics.gravity
             if not self.physics.gravity:
                 self.jumped = True
-                self.physics.velocity = Vector2D.empty()
+                self.physics.velocity = Vector2D()
         super(Player, self).handle_event(e)
 
     def handle_keyboard(self, state) -> None:
@@ -69,7 +69,7 @@ class Player(GameObject):
         sit_down = False
         move_left = False
         move_right = False
-        move_vector = Vector2D.empty()
+        move_vector = Vector2D()
 
         if state[sdl2.SDL_SCANCODE_LEFT] or state[sdl2.SDL_SCANCODE_A]:
             move_vector.x -= self.speed

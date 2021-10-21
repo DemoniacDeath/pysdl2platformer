@@ -4,7 +4,9 @@ import sdl2
 import sdl2.sdlimage
 
 from core.color import Color
+from core.size import Size
 from core.vector2d import Vector2D
+from engine.context import GameContext
 
 
 class RenderObject(object):
@@ -58,12 +60,18 @@ class RenderObject(object):
         render_object.fullRender = False
         return render_object
 
-    def render(self, context, position, size, camera_position, camera_size) -> None:
-        render_position = position.plus(
-            Vector2D(-size.width / 2, -size.height / 2)
-        ).minus(camera_position).minus(
-            Vector2D(-camera_size.width / 2, -camera_size.height / 2)
-        )
+    def render(
+            self,
+            context: GameContext,
+            position: Vector2D,
+            size: Size,
+            camera_position: Vector2D,
+            camera_size: Size
+    ) -> None:
+        render_position = position \
+                          + Vector2D(-size.width / 2, -size.height / 2) \
+                          - camera_position \
+                          - Vector2D(-camera_size.width / 2, -camera_size.height / 2)
 
         rect = sdl2.SDL_Rect()
         rect.x = round(context.settings.windowWidth * (render_position.x / camera_size.width))

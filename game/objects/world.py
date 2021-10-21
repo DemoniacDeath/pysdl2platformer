@@ -8,7 +8,7 @@ from game.objects.camera import Camera
 class World(GameObject):
     def __init__(self, context, frame: Rect) -> None:
         super(World, self).__init__(context, frame)
-        self.camera = Camera(self.context, Rect(self.frame.center, self.frame.size.div(2)))
+        self.camera = Camera(self.context, Rect(self.frame.center, self.frame.size * (1 / 2)))
 
     def handle_event(self, e: sdl2.SDL_Event) -> None:
         super(World, self).handle_event(e)

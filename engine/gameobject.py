@@ -81,7 +81,7 @@ class GameObject(object):
             child.animate()
 
     def render(self, local_basis: Vector2D, camera_position: Vector2D, camera_size: Size) -> None:
-        global_position = self.frame.center.plus(local_basis)
+        global_position = self.frame.center + local_basis
         if self.visible and self.renderObject:
             self.renderObject.render(self.context, global_position, self.frame.size, camera_position, camera_size)
         for child in self.children:
@@ -98,6 +98,6 @@ class GameObject(object):
 
     def global_position(self) -> Vector2D:
         if self.parent:
-            return self.frame.center.plus(self.parent.global_position())
+            return self.frame.center + self.parent.global_position()
         else:
             return self.frame.center

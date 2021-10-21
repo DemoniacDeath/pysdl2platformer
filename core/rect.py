@@ -13,10 +13,6 @@ class Rect(object):
         self.size = size.copy()
 
     @classmethod
-    def empty(cls) -> Rect:
-        return cls(Vector2D.empty(), Size.empty())
-
-    @classmethod
     def make(cls, x: float, y: float, width: float, height: float) -> Rect:
         return cls(Vector2D(x, y), Size(width, height))
 

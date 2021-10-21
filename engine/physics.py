@@ -15,7 +15,7 @@ class PhysicsState(object):
     game_object: engine.gameobject.GameObject
 
     def __init__(self, game_object: engine.gameobject.GameObject) -> None:
-        self.velocity = Vector2D.empty()
+        self.velocity = Vector2D()
         self.gravity = False
         self.still = True
         self.gravityForce = 0
@@ -61,9 +61,9 @@ class PhysicsState(object):
                 collider.colliders.add(self.game_object)
 
                 self.game_object.handle_enter_collision(Collision(collider.game_object, overlap_area))
-                collider.game_object.handle_enter_collision(Collision(self.game_object, overlap_area.times(-1)))
+                collider.game_object.handle_enter_collision(Collision(self.game_object, overlap_area * (-1)))
             self.game_object.handle_collision(Collision(collider.game_object, overlap_area))
-            collider.game_object.handle_collision(Collision(self.game_object, overlap_area.times(-1)))
+            collider.game_object.handle_collision(Collision(self.game_object, overlap_area * (-1)))
         elif already_collided:
             self.colliders.remove(collider.game_object)
             collider.colliders.remove(self.game_object)

@@ -9,15 +9,8 @@ class Size(object):
         self.width = width
         self.height = height
 
-    @classmethod
-    def empty(cls) -> Size:
-        return cls(0, 0)
-
     def copy(self) -> Size:
         return Size(self.width, self.height)
 
-    def times(self, s: float) -> Size:
-        return Size(self.width * s, self.height * s)
-
-    def div(self, s: float) -> Size:
-        return Size(self.width / s, self.height / s)
+    def __mul__(self, scalar: float) -> Size:
+        return Size(self.width * scalar, self.height * scalar)
